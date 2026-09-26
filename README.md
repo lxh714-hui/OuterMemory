@@ -39,7 +39,15 @@ But trusted long-term memory is changed only through an explicit human-governed 
 
 ## Core Principles
 
-### 1. Memory is independent of the model
+### 1. Project-Centric Memory
+
+OuterMemory is project-centric rather than user-centric.
+
+Memory belongs to the project, not to a specific developer, agent, or model. The same governed project memory can therefore be used by one developer across multiple AI tools, or shared by a team working on the same project.
+
+Different developers, agents, and models may come and go. The project's trusted memory remains.
+
+### 2. Memory is independent of the model
 
 Memory is stored outside the model in human-readable files.
 
@@ -55,7 +63,7 @@ Model
 
 The memory layer is the stable component.
 
-### 2. AI can read, but trusted memory is governed
+### 3. AI can read, but trusted memory is governed
 
 The implemented retrieval and relation-expansion components may be used by an AI-facing integration to:
 
@@ -80,7 +88,7 @@ Trusted Memory
 
 Approval and application are intentionally separate operations.
 
-### 3. Memory changes are traceable and reversible
+### 4. Memory changes are traceable and reversible
 
 Before a governed mutation changes trusted memory, OuterMemory creates a minimal snapshot of the affected state.
 
@@ -98,7 +106,7 @@ Before State
 
 Rollback is itself governed and recorded.
 
-### 4. Retrieval power and write authority are separate
+### 5. Retrieval power and write authority are separate
 
 Restricting memory writes should not require restricting the AI's ability to obtain information.
 
@@ -199,8 +207,6 @@ last_used
 
 `Metadata.id` is treated as the authoritative logical identity of a memory entry.
 
----
-
 ## Retrieval
 
 The current retrieval system supports:
@@ -214,8 +220,6 @@ The current retrieval system supports:
 For example, retrieving a variable may also surface related resources or standards.
 
 The current implementation intentionally remains lightweight and does not require a vector database.
-
----
 
 ## Governed Mutation
 
