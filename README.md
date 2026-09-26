@@ -11,8 +11,6 @@ Its core idea is simple:
 Models can change. Agents can change.  
 Project memory should remain.
 
----
-
 ## Why OuterMemory?
 
 AI coding assistants are powerful, but their working context is temporary.
@@ -38,8 +36,6 @@ OuterMemory therefore separates **retrieval** from **persistence**.
 
 AI should be able to search widely for useful information.  
 But trusted long-term memory is changed only through an explicit human-governed process.
-
----
 
 ## Core Principles
 
@@ -122,8 +118,6 @@ External information may be used during reasoning without automatically becoming
 
 Persistence remains a separate decision.
 
----
-
 ## Current Architecture
 
 The implemented trusted-memory retrieval components are:
@@ -165,8 +159,6 @@ Trusted Memory
 ```
 
 Rollback restores the recorded pre-mutation state through the governed history mechanism.
-
----
 
 ## Memory Structure
 
@@ -245,8 +237,6 @@ Rejected, pending, or already-applied proposals cannot be applied as new trusted
 
 The controlled writer derives mutations from validated approved proposals rather than accepting arbitrary filesystem mutation plans.
 
----
-
 ## History and Recovery
 
 Before trusted memory is changed, OuterMemory records a prepared history event and stores the minimal affected pre-state.
@@ -264,8 +254,6 @@ rolled_back
 If a mutation fails after partially changing memory, OuterMemory attempts to restore the previous state.
 
 If restoration cannot be completed safely, the event can enter `recovery_required`. When that state can be persisted, it blocks further governed mutations until the condition is resolved.
-
----
 
 ## Safety Boundary
 
@@ -285,7 +273,44 @@ This is an application-level governance model for a local prototype.
 
 OuterMemory does **not** attempt to defend against a malicious process that already has arbitrary Python execution or unrestricted filesystem access.
 
----
+## Memory Format
+
+OuterMemory stores trusted memory as simple, human-readable Markdown files.
+
+A memory record is organized into sections. For example:
+
+```markdown
+# Metadata
+
+id: v_demo_feature
+frequency: 0
+last_used:
+
+# Description
+
+Example feature record for the OuterMemory demo
+
+# Aliases
+
+- Demo Feature
+
+# Related
+
+- r_demo_workspace
+- s_demo_conventions
+```
+
+The `Metadata` section identifies the record, while additional sections describe its content and relationships. Different memory categories may contain different content sections depending on their purpose.
+
+For example, resources may contain a `Value` section, while standards may contain `Guidelines`.
+
+Synthetic examples are included under the [`memory/`](memory/) directory:
+
+- `memory/variables/v_demo_feature.md`
+- `memory/resources/r_demo_workspace.md`
+- `memory/standards/s_demo_conventions.md`
+
+These records are demonstration data only and do not represent a real project.
 
 ## Current Status
 
@@ -304,7 +329,6 @@ OuterMemory does **not** attempt to defend against a malicious process that alre
 - [x] Rollback
 - [x] Path and identifier validation
 - [x] Best-effort failure recovery and recovery-required blocking
-- [x] Recovery-required mutation blocking
 - [x] Automated governance tests
 
 Current governed-mutation test suite:
@@ -326,8 +350,6 @@ The following ideas are part of the direction of OuterMemory but are **not yet i
 - [ ] Memory audit and maintenance
 - [ ] Improved usage statistics
 - [ ] Developer-tool / editor integration
-
----
 
 ## Repository Structure
 
@@ -358,8 +380,6 @@ OuterMemory/
 │
 └── tests/
 ```
-
----
 
 ## Design Direction
 
@@ -395,8 +415,6 @@ The goal is not to limit what an AI can learn.
 
 The goal is to make persistent project knowledge **stable, inspectable, and human-governed**.
 
----
-
 ## Project Stage
 
 OuterMemory is currently an early local prototype.
@@ -407,6 +425,10 @@ The focus is on establishing the memory architecture and governance model before
 
 This project was developed with the assistance of AI coding tools, including ChatGPT.
 
-The architecture, design decisions, and key logic of OuterMemory were determined by the author. AI tools were used to assist with implementation, code review, debugging, documentation, and development workflows.
+The architecture, design decisions, and key logic of OuterMemory were determined by the author. AI tools assisted with implementation, code review, debugging, and documentation.
 
-The author remains responsible for the final code, design decisions, and correctness of the project.
+The author takes full responsibility for the final code, design decisions, and correctness of the project. This project is committed to transparency and human accountability in AI-assisted development.
+
+## License
+
+OuterMemory is released under the [MIT License](LICENSE).
