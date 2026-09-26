@@ -1,437 +1,194 @@
 # OuterMemory
 
-**A human-governed persistent memory layer for AI Coding.**
-
-OuterMemory is an experimental external long-term memory system designed to make coding assistants more persistent, auditable, and independent of any specific model or agent.
-
-Its core idea is simple:
+**A human-governed persistent memory layer for AI coding.**
 
 > **Memory > Agent > Model**
 
-Models can change. Agents can change.  
-Project memory should remain.
+Coding agents and models are replaceable. Project memory should persist independently of them. OuterMemory keeps trusted project knowledge in project-scoped Markdown files, so the same memory can be used across AI tools, agents, models, and developers.
 
-## Why OuterMemory?
-
-AI coding assistants are powerful, but their working context is temporary.
-
-Across sessions, tools, or models, they may lose track of:
-
-- project conventions,
-- important variables and paths,
-- architectural decisions,
-- reusable functions,
-- relationships between components,
-- and previously established constraints.
-
-OuterMemory treats this information as a persistent project asset rather than something owned by a particular model or conversation.
-
-At the same time, persistent memory introduces another problem:
-
-> If an AI can freely rewrite its own long-term memory, incorrect information can become persistent truth.
-
-OuterMemory therefore separates **retrieval** from **persistence**.
-
-> **Broad retrieval, governed persistence.**
-
-AI should be able to search widely for useful information.  
-But trusted long-term memory is changed only through an explicit human-governed process.
-
-## Core Principles
-
-### 1. Project-Centric Memory
-
-OuterMemory is project-centric rather than user-centric.
-
-Memory belongs to the project, not to a specific developer, agent, or model. The same governed project memory can therefore be used by one developer across multiple AI tools, or shared by a team working on the same project.
-
-Different developers, agents, and models may come and go. The project's trusted memory remains.
-
-### 2. Memory is independent of the model
-
-Memory is stored outside the model in human-readable files.
-
-A project should be able to switch models or agents without losing its long-term memory.
+OuterMemory is project-centric, not user-centric: memory belongs to the project, not to a particular developer, agent, or model.
 
 ```text
-Memory
-  ↑
-Agent
-  ↑
-Model
+AI tool A        AI agent B        AI model C
+     \               |               /
+      \              |              /
+       +------ Project OuterMemory ------+
+                    |
+             project memory
 ```
 
-The memory layer is the stable component.
+## The boundary
 
-### 3. AI can read, but trusted memory is governed
+OuterMemory follows one principle: **broad retrieval, governed persistence**.
 
-The implemented retrieval and relation-expansion components may be used by an AI-facing integration to:
-
-- retrieve trusted memory,
-- inspect relationships between memory entries.
-
-`ProposalService` provides proposal creation and status inspection. Caller integration that combines retrieval with these proposal capabilities is not yet implemented.
-
-Trusted-memory mutation follows a controlled path:
+AI-facing callers can retrieve project memory broadly and create proposals. They cannot approve proposals, apply changes, or roll back history. Trusted memory changes only through explicit human governance.
 
 ```text
-Proposal
-   ↓
-Human Approval
-   ↓
-Controlled Mutation
-   ↓
-History
-   ↓
-Trusted Memory
+AI-facing interface
+  retrieve ------------------------------> trusted project memory
+  propose -------------------------------> pending proposal
+  proposal-status -----------------------> pending proposal status
+                                               |
+                                               v
+                                     explicit human approval
+                                               |
+                                               v
+                                    controlled application
+                                               |
+                                               v
+                                           history event
+                                               |
+                                               v
+                                     trusted project memory
 ```
 
-Approval and application are intentionally separate operations.
+This separation is intentional:
 
-### 4. Memory changes are traceable and reversible
+- Retrieval authority and trusted-memory write authority are separate.
+- Creating a proposal is not approval.
+- Approval is not application.
+- AI-facing interfaces do not expose `approve`, `reject`, `apply`, or `rollback`.
+- Team use follows naturally from project-centric memory; it is not a separate collaboration feature.
 
-Before a governed mutation changes trusted memory, OuterMemory creates a minimal snapshot of the affected state.
+## What is implemented
 
-This allows changes to be traced and rolled back.
+- Project-scoped Markdown memory in `memory/`, with schema-supported `variables`, `resources`, `functions`, and `standards` categories.
+- Parsing, validation, ranked keyword retrieval, and related-memory expansion.
+- A Python `OuterMemory` API and a machine-readable JSON CLI.
+- Pending proposals with status inspection.
+- Explicit human approval or rejection.
+- Controlled mutation from approved proposals only, with validation and pre-mutation snapshots.
+- History events, rollback, recovery handling, and blocking when recovery is required.
+- An MCP adapter with stdio and Streamable HTTP transports.
+
+## Governance flow
 
 ```text
-Before State
-     ↓
- Snapshot
-     ↓
- Mutation
-     ↓
- History Event
+AI proposes
+  -> pending proposal
+  -> explicit human approval
+  -> controlled apply
+  -> history event
+  -> trusted project memory
 ```
 
-Rollback is itself governed and recorded.
+The human-facing command interface supplies `approve`, `reject`, `apply`, and `rollback`. Approval and rejection require explicit confirmation; applying is allowed only for an approved proposal. Before an apply, OuterMemory snapshots affected trusted-memory paths and records a history event.
 
-### 5. Retrieval power and write authority are separate
-
-Restricting memory writes should not require restricting the AI's ability to obtain information.
-
-The intended architecture allows AI systems to eventually retrieve information from sources such as:
+Rollback is also governed:
 
 ```text
-Trusted Memory
-Documentation
-GitHub repositories
-Web sources
-Papers
-External databases
-APIs
+human-confirmed rollback
+  -> new history event
+  -> trusted memory restored
 ```
 
-External information may be used during reasoning without automatically becoming trusted memory.
+Rollback preserves audit history rather than erasing it.
 
-Persistence remains a separate decision.
+## Quick start
 
-## Current Architecture
+Run from a project repository containing a `memory/` directory. The Python source is kept in `src/` and uses the installed Python MCP SDK for MCP support.
 
-The implemented trusted-memory retrieval components are:
+Install the current MCP dependency when using MCP integration:
 
 ```text
-Markdown Memory
-      ↓
-MemoryParser
-      ↓
-MemoryLoader
-      ↓
-MemoryQuery
-      ↓
-MemoryRetriever
-      ↓
-Ranked Memory Results
+python -m pip install mcp
 ```
 
-These components can produce ranked results when invoked by a caller; a complete user-query orchestration layer is not yet implemented.
-
-The governed mutation path is:
+Retrieve project memory through the JSON CLI:
 
 ```text
-Caller / Future AI
-        ↓
-ProposalService
-        ↓
-Pending Proposal
-        ↓
-HumanProposalDecisions
-        ↓
-Approved Proposal
-        ↓
-ControlledMemoryWriter
-        ↓
-History + Snapshot
-        ↓
-Trusted Memory
+python src/outermemory_cli.py --root . retrieve "demo feature" --topk 3
 ```
 
-Rollback restores the recorded pre-mutation state through the governed history mechanism.
+The CLI prints JSON to standard output on success. It exposes only:
 
-## Memory Structure
+- `retrieve`
+- `propose`
+- `proposal-status`
 
-Trusted memory supports four schema categories. The currently populated physical directories are:
+For the full command arguments and output shapes, see [docs/cli.md](docs/cli.md).
+
+## Python API
+
+Use `OuterMemory` when calling the project-memory interface directly:
+
+```python
+from outermemory import OuterMemory
+
+memory = OuterMemory("/path/to/project")
+results = memory.retrieve("demo feature", topk=3)
+
+proposal = memory.propose(
+    "create",
+    {"category": "variables", "id": "v_DEMO"},
+    {"content": "...valid memory Markdown..."},
+    "Record the project setting",
+)
+status = memory.proposal_status(proposal["proposal_id"])
+```
+
+When running this from the repository, make `src/` importable (for example, set `PYTHONPATH=src`). This API intentionally has no approval, rejection, application, or rollback methods.
+
+## MCP integration
+
+`src/outermemory_mcp.py` adapts one explicit project root to MCP. It exposes exactly three AI-facing tools:
+
+- `outermemory_retrieve` -> `OuterMemory.retrieve(...)`
+- `outermemory_propose` -> `OuterMemory.propose(...)`
+- `outermemory_proposal_status` -> `OuterMemory.proposal_status(...)`
+
+No MCP tool can approve, reject, apply, or roll back memory changes.
+
+### Stdio
+
+Stdio is the default transport and is suitable for MCP clients that launch a local server process:
 
 ```text
-memory/
-├── variables/
-├── resources/
-└── standards/
+python src/outermemory_mcp.py --root /path/to/project
 ```
 
-`functions` is a supported schema category and can be created and populated later.
+Codex integration has been verified end-to-end through MCP stdio. MCP remains an AI-agnostic integration boundary rather than a Codex-specific feature.
 
-The documented ID-prefix convention is:
+### Streamable HTTP
 
-| Category | Prefix | Example |
-|---|---|---|
-| Variables | `v_` | `v_demo_feature` |
-| Resources | `r_` | `r_demo_workspace` |
-| Functions | `f_` | `f_example` |
-| Standards | `s_` | `s_demo_conventions` |
-
-Current validation accepts general logical IDs and does not enforce category-specific prefixes.
-
-Memory entries are stored as Markdown so that both humans and machines can inspect them directly.
-
-A memory entry may contain metadata such as:
+Run the same server over Streamable HTTP:
 
 ```text
-ID
-Aliases
-Description
-Related
-frequency
-last_used
+python src/outermemory_mcp.py --root /path/to/project --transport streamable-http
 ```
 
-`Metadata.id` is treated as the authoritative logical identity of a memory entry.
+The default endpoint is `http://127.0.0.1:8000/mcp`. `--host`, `--port`, and `--path` override those defaults.
 
-## Retrieval
+## Human governance commands
 
-The current retrieval system supports:
-
-- exact ID lookup,
-- alias lookup,
-- keyword search,
-- ranked retrieval,
-- Related-memory expansion.
-
-For example, retrieving a variable may also surface related resources or standards.
-
-The current implementation intentionally remains lightweight and does not require a vector database.
-
-## Governed Mutation
-
-Persistent memory changes are represented as proposals.
-
-A proposal moves through explicit states rather than directly modifying trusted memory.
-
-Conceptually:
+From the project repository, the separate human-facing entry point is:
 
 ```text
-pending
-   ↓
-approved
-   ↓
-applied
+python src/main.py approve PROPOSAL_ID
+python src/main.py reject PROPOSAL_ID
+python src/main.py apply PROPOSAL_ID
+python src/main.py rollback EVENT_ID
 ```
 
-Rejected, pending, or already-applied proposals cannot be applied as new trusted-memory mutations.
+These commands are deliberately outside the AI-facing API, CLI, and MCP surfaces.
 
-The controlled writer derives mutations from validated approved proposals rather than accepting arbitrary filesystem mutation plans.
+## Testing
 
-## History and Recovery
-
-Before trusted memory is changed, OuterMemory records a prepared history event and stores the minimal affected pre-state.
-
-Mutation events can transition through states such as:
+Run the full suite with:
 
 ```text
-prepared
-applied
-recovered
-recovery_required
-rolled_back
+python -m unittest discover -s tests -v
 ```
 
-If a mutation fails after partially changing memory, OuterMemory attempts to restore the previous state.
-
-If restoration cannot be completed safely, the event can enter `recovery_required`. When that state can be persisted, it blocks further governed mutations until the condition is resolved.
-
-## Safety Boundary
-
-OuterMemory currently uses a **capability-based application boundary**.
-
-The AI-facing interface is not given capabilities for:
-
-- approving proposals,
-- rejecting proposals,
-- initiating rollback,
-- arbitrary trusted-memory mutation,
-- generic snapshot restoration.
-
-Human-facing operations control approval, rejection, and rollback.
-
-This is an application-level governance model for a local prototype.
-
-OuterMemory does **not** attempt to defend against a malicious process that already has arbitrary Python execution or unrestricted filesystem access.
-
-## Memory Format
-
-OuterMemory stores trusted memory as simple, human-readable Markdown files.
-
-A memory record is organized into sections. For example:
-
-```markdown
-# Metadata
-
-id: v_demo_feature
-frequency: 0
-last_used:
-
-# Description
-
-Example feature record for the OuterMemory demo
-
-# Aliases
-
-- Demo Feature
-
-# Related
-
-- r_demo_workspace
-- s_demo_conventions
-```
-
-The `Metadata` section identifies the record, while additional sections describe its content and relationships. Different memory categories may contain different content sections depending on their purpose.
-
-For example, resources may contain a `Value` section, while standards may contain `Guidelines`.
-
-Synthetic examples are included under the [`memory/`](memory/) directory:
-
-- `memory/variables/v_demo_feature.md`
-- `memory/resources/r_demo_workspace.md`
-- `memory/standards/s_demo_conventions.md`
-
-These records are demonstration data only and do not represent a real project.
-
-## Current Status
-
-### Implemented
-
-- [x] Markdown-based trusted memory
-- [x] Memory parsing and loading
-- [x] ID and alias lookup
-- [x] Keyword and ranked retrieval
-- [x] Related-memory expansion
-- [x] Persistent proposal records
-- [x] Human approval / rejection boundary
-- [x] Controlled trusted-memory mutation
-- [x] Minimal pre-mutation snapshots
-- [x] History events
-- [x] Rollback
-- [x] Path and identifier validation
-- [x] Best-effort failure recovery and recovery-required blocking
-- [x] Automated governance tests
-
-Current governed-mutation test suite:
-
-```text
-Ran 18 tests
-OK
-```
-
-### Planned / Experimental
-
-The following ideas are part of the direction of OuterMemory but are **not yet implemented as complete features**:
-
-- [ ] AI-initiated memory retrieval
-- [ ] External Knowledge layer
-- [ ] Web / documentation / repository retrieval integration
-- [ ] Evidence accumulation for memory candidates
-- [ ] AI-generated admission proposals
-- [ ] Memory audit and maintenance
-- [ ] Improved usage statistics
-- [ ] Developer-tool / editor integration
-
-## Repository Structure
-
-```text
-OuterMemory/
-├── docs/
-│   └── architecture.md
-│
-├── memory/
-│   ├── variables/
-│   ├── resources/
-│   └── standards/
-│
-├── history/
-│   └── snapshots/
-│
-├── src/
-│   ├── history_manager.py
-│   ├── main.py
-│   ├── memory_loader.py
-│   ├── memory_parser.py
-│   ├── memory_query.py
-│   ├── memory_retriever.py
-│   ├── memory_schema.py
-│   ├── memory_writer.py
-│   ├── proposal_store.py
-│   └── repository_paths.py
-│
-└── tests/
-```
-
-## Design Direction
-
-OuterMemory is being developed around a simple distinction:
-
-```text
-Information the AI can use
-            ≠
-Information the system should remember forever
-```
-
-Future external retrieval should remain broad.
-
-In a future external-retrieval architecture, information discovered from the web, repositories, documentation, papers, or other sources could participate in reasoning without automatically becoming trusted memory.
-
-Promotion into trusted long-term memory follows a different path:
-
-```text
-External Knowledge
-        ↓
-Repeated usefulness / evidence
-        ↓
-Proposal
-        ↓
-Human Review
-     ↙       ↘
- Reject     Approve
-               ↓
-        Trusted Memory
-```
-
-The goal is not to limit what an AI can learn.
-
-The goal is to make persistent project knowledge **stable, inspectable, and human-governed**.
-
-## Project Stage
-
-OuterMemory is currently an early local prototype.
-
-The focus is on establishing the memory architecture and governance model before adding larger integrations such as external retrieval systems, editor extensions, or autonomous agent workflows.
+The suite covers retrieval, proposal governance, controlled mutation and recovery, rollback, the JSON CLI, and MCP tool and transport selection.
 
 ## Notice
 
-This project was developed with the assistance of AI coding tools, including ChatGPT.
+OuterMemory was developed with the assistance of AI coding tools.
 
-The architecture, design decisions, and key logic of OuterMemory were determined by the author. AI tools assisted with implementation, code review, debugging, and documentation.
+AI tools were used during parts of the implementation, testing, documentation, and code review process. The project architecture, design decisions, governance model, and final acceptance of changes remain human-directed and human-reviewed.
 
-The author takes full responsibility for the final code, design decisions, and correctness of the project. This project is committed to transparency and human accountability in AI-assisted development.
+AI-generated or AI-assisted changes are not treated as authoritative by default; they are reviewed and validated before being incorporated into the project.
 
 ## License
 
