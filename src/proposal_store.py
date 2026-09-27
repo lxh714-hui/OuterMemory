@@ -57,6 +57,24 @@ class HumanProposalDecisions:
     def reject(self, proposal_id):
         return self._repository.decide(proposal_id, "rejected")
 
+    def decide_many(self, proposal_ids, status):
+        """Human-only bulk decision; validates the entire group before writing."""
+        if status not in {"approved", "rejected"} or not proposal_ids:
+            raise ProposalError("invalid bulk decision")
+        if len(set(proposal_ids)) != len(proposal_ids):
+            raise ProposalError("proposal group contains duplicates")
+        proposals = [self._repository.load(proposal_id) for proposal_id in proposal_ids]
+        if any(proposal["status"] != "pending" for proposal in proposals):
+            raise ProposalError("only pending proposals may be decided")
+        try:
+            return [self._repository.decide(proposal_id, status) for proposal_id in proposal_ids]
+        except (OSError, ProposalError):
+            # Keep a failed bulk decision from leaving an accidental partial
+            # review state. These are proposal records, never trusted memory.
+            for proposal in proposals:
+                self._repository._save(proposal)
+            raise
+
 
 class _ProposalRepository:
     VALID_OPERATIONS = {"create", "update", "delete", "merge"}

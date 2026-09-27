@@ -1,6 +1,6 @@
 # OuterMemory
 
-**A human-governed persistent memory layer for AI coding.**
+**Human-governed persistence with risk-aware attention management for AI coding.**
 
 > **Memory > Agent > Model**
 
@@ -8,13 +8,16 @@ Coding agents and models are replaceable. Project memory should persist independ
 
 OuterMemory is project-centric, not user-centric: memory belongs to the project, not to a particular developer, agent, or model.
 
-```text
-AI tool A        AI agent B        AI model C
-     \               |               /
-      \              |              /
-       +------ Project OuterMemory ------+
-                    |
-             project memory
+```mermaid
+flowchart TB
+    subgraph Project["Project"]
+        OM["OuterMemory"]
+        Memory["Trusted Project Memory"]
+        OM --> Memory
+    end
+    Tool["AI Tool"] --> OM
+    Agent["AI Agent"] --> OM
+    Model["AI Model"] --> OM
 ```
 
 ## The boundary
@@ -23,24 +26,37 @@ OuterMemory follows one principle: **broad retrieval, governed persistence**.
 
 AI-facing callers can retrieve project memory broadly and create proposals. They cannot approve proposals, apply changes, or roll back history. Trusted memory changes only through explicit human governance.
 
-```text
-AI-facing interface
-  retrieve ------------------------------> trusted project memory
-  propose -------------------------------> pending proposal
-  proposal-status -----------------------> pending proposal status
-                                               |
-                                               v
-                                     explicit human approval
-                                               |
-                                               v
-                                    controlled application
-                                               |
-                                               v
-                                           history event
-                                               |
-                                               v
-                                     trusted project memory
+```mermaid
+flowchart LR
+    AI["AI-facing Interface"]
+    AI -->|retrieve| Memory["Trusted Project Memory"]
+    AI -->|propose| Proposal["Pending Proposal"]
+    AI -->|proposal-status| Proposal
+    Proposal -->|explicit human approval| Apply["Controlled Application"]
+    Apply --> History["History Event"]
+    History --> Memory
 ```
+
+## Governance attention channels
+
+Governance has four attention channels, not four permission levels. In every channel, **all trusted-memory creation, modification, merge, and deletion still require a proposal, explicit human approval, controlled application, and history**.
+
+```text
+retrieval results ──> persistent retrieval totals ──> milestones 5, 10, 20, 40... ──> pending low-risk requests
+                                                                                         │
+                                                                                 announce each 10 once
+
+current retrieval items ──────> contextual scope ──┐
+                                                    ├─> shared Self-Check Engine ─> immediate request / grouped report
+whole trusted-memory library ─> full-library scope ─┘                                      │
+                                                                              proposal, if a human requests action
+                                                                                             │
+                                                                    human approval -> controlled application -> history
+```
+
+Retrieval counts, emitted milestones, announcement state, and request resolution are persisted separately in ignored runtime state (`.outermemory/governance.json`). A batch announcement does not resolve a request. The full scan is conservative: broken `Related` references are schema evidence; stale `last_used`, identical descriptions/shared aliases, and conflicting optional metadata are explicitly labeled heuristics rather than facts. It never changes trusted memory.
+
+At startup OuterMemory runs the same scan only if `last_successful_scan` is absent or at least 24 hours old. That timestamp is written only after a complete successful scan; crashes, interruptions, and validation failures leave it unchanged and are retried on the next startup.
 
 This separation is intentional:
 
@@ -168,9 +184,15 @@ python src/main.py approve PROPOSAL_ID
 python src/main.py reject PROPOSAL_ID
 python src/main.py apply PROPOSAL_ID
 python src/main.py rollback EVENT_ID
+python src/main.py scan
+python src/main.py requests
 ```
 
 These commands are deliberately outside the AI-facing API, CLI, and MCP surfaces.
+
+`scan` performs the manual full-library read-only scan. `scan ISSUE_TYPE` reviews the latest scan group and `scan FINDING_ID` reviews one finding. `requests [ISSUE_TYPE]`, `request REQUEST_ID`, and human-confirmed `resolve-request REQUEST_ID` inspect and explicitly handle governance requests. Resolving a request does not alter trusted memory; a change prompted by a finding must still be submitted through `propose` and then approved and applied by a human.
+
+Human reviewers may run `approve-all PROPOSAL_ID...` or `reject-all PROPOSAL_ID...` for proposal groups. Governance-request groups use `review-all REQUEST_ID...` or `dismiss-all REQUEST_ID...`: those words deliberately describe attention handling, not mutation authorization. Each bulk operation requires a typed secondary confirmation. Individual review can stop and resume later; unnamed items remain pending. Proposal approval never applies a mutation.
 
 ## Testing
 

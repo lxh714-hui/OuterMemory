@@ -16,6 +16,7 @@ env/
 proposals/
 history/snapshots/
 history/events/
+.outermemory/
 
 # OS
 .DS_Store
