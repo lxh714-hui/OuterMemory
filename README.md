@@ -9,15 +9,21 @@ Coding agents and models are replaceable. Project memory should persist independ
 OuterMemory is project-centric, not user-centric: memory belongs to the project, not to a particular developer, agent, or model.
 
 ```mermaid
-flowchart TB
+flowchart LR
+    Tool["AI Tool"]
+    Agent["AI Agent"]
+    Model["AI Model"]
+
     subgraph Project["Project"]
+        direction LR
         OM["OuterMemory"]
         Memory["Trusted Project Memory"]
         OM --> Memory
     end
-    Tool["AI Tool"] --> OM
-    Agent["AI Agent"] --> OM
-    Model["AI Model"] --> OM
+
+    Tool --> OM
+    Agent --> OM
+    Model --> OM
 ```
 
 ## The boundary
