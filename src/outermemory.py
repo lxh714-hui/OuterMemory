@@ -23,12 +23,13 @@ class OuterMemory:
         self._governance.contextual_self_check(results)
         return results
 
-    def propose(self, operation, target, change=None, reason=None):
+    def propose(self, operation, target, change=None, reason=None, source_request_ids=None):
         return self.proposals.create_proposal(
             operation=operation,
             target=target,
             change=change or {},
             reason=reason,
+            source_request_ids=source_request_ids,
         )
 
     def proposal_status(self, proposal_id):

@@ -27,14 +27,28 @@ class ProposalService:
     def __init__(self, root=None):
         self._repository = _ProposalRepository(root)
 
-    def create_proposal(self, operation, target, change, reason):
+    def create_proposal(self, operation, target, change, reason, source_request_ids=None):
+        if source_request_ids is None:
+            source_request_ids = []
+        elif not isinstance(source_request_ids, list) or not all(isinstance(request_id, str) for request_id in source_request_ids):
+            raise ProposalError("source_request_ids must be None or a list of strings")
         if not isinstance(target, dict) or target.get("category") not in MemorySchema.CATEGORIES:
             raise ProposalError("invalid proposal category")
         try:
             validate_memory_id(target.get("id"))
         except MemoryValidationError as error:
             raise ProposalError("invalid logical memory id") from error
-        return self._repository.create(operation, target, change, reason)
+        if len(set(source_request_ids)) != len(source_request_ids):
+            raise ProposalError("source governance request ids must be unique")
+        if source_request_ids:
+            from governance import GovernanceError, GovernanceService
+            try:
+                governance = GovernanceService(self._repository.root)
+                for request_id in source_request_ids:
+                    governance.request(request_id)
+            except GovernanceError as error:
+                raise ProposalError("source governance request not found") from error
+        return self._repository.create(operation, target, change, reason, source_request_ids)
 
     def get_status(self, proposal_id):
         proposal = self._repository.load(proposal_id)
@@ -84,7 +98,7 @@ class _ProposalRepository:
         self.proposals_root = (self.root / "proposals").resolve()
         self.proposals_root.mkdir(parents=True, exist_ok=True)
 
-    def create(self, operation, target, change, reason):
+    def create(self, operation, target, change, reason, source_request_ids=None):
         if operation not in self.VALID_OPERATIONS:
             raise ProposalError("unsupported proposal operation")
         if not isinstance(target, dict) or not target.get("category") or not target.get("id"):
@@ -94,6 +108,7 @@ class _ProposalRepository:
             "target": target, "change": change or {}, "reason": reason,
             "timestamp": self._timestamp(), "status": "pending",
             "decision_timestamp": None, "applied_event_id": None,
+            "source_request_ids": list(source_request_ids or []),
         }
         self._save(proposal)
         return proposal
@@ -121,6 +136,14 @@ class _ProposalRepository:
         proposal["applied_event_id"] = event_id
         self._save(proposal)
         return proposal
+
+    def find_by_source_request(self, request_id):
+        return [proposal for proposal in self._proposals() if request_id in proposal.get("source_request_ids", [])]
+
+    def _proposals(self):
+        for path in self.proposals_root.glob("prop_*.json"):
+            with path.open("r", encoding="utf-8") as handle:
+                yield json.load(handle)
 
     def _path(self, proposal_id):
         validate_proposal_id(proposal_id)

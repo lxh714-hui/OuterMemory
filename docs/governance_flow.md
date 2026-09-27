@@ -44,6 +44,15 @@ One `SelfCheckEngine` supplies both scopes; scope controls its item set and pres
 
 Human-facing governance supports individual proposal approval/rejection and group `approve-all`/`reject-all` decisions. Governance requests are only attention objects, so their group operations are `review-all` and `dismiss-all`, never approval of a memory mutation. Bulk operations require a secondary typed confirmation, validate the selected group as pending, and do not apply mutations. Individual review is naturally pausable: only named items are handled and every unprocessed item remains pending.
 
+## Governance traceability
+
+```text
+Detection -> Governance Request -> Human Review -> Proposal -> Human Approval
+          -> Controlled Application -> History Event -> Trusted Project Memory
+```
+
+Proposals may optionally carry one or more `source_request_ids`; this does not review, approve, or apply them. When a proposal is applied, its source IDs are copied into the mutation history event. Human-facing `trace` exposes the provenance links between governance requests, proposals, and history events. Direct proposals without governance provenance remain supported.
+
 ## Mutation lifecycle
 
 ```text

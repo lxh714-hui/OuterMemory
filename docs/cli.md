@@ -53,7 +53,7 @@ Purpose: create a pending proposal for a governed memory change. Creating a prop
 Syntax:
 
 ```text
-python src/outermemory_cli.py [--root PATH] propose OPERATION --category CATEGORY --id MEMORY_ID [--change JSON_OBJECT] [--reason TEXT]
+python src/outermemory_cli.py [--root PATH] propose OPERATION --category CATEGORY --id MEMORY_ID [--change JSON_OBJECT] [--reason TEXT] [--source-request-ids JSON_ARRAY]
 ```
 
 Arguments:
@@ -63,6 +63,7 @@ Arguments:
 - `--id MEMORY_ID` is required and is the target logical memory ID.
 - `--change JSON_OBJECT` is an optional JSON object and defaults to `{}`.
 - `--reason TEXT` is optional.
+- `--source-request-ids JSON_ARRAY` is optional provenance, for example `["gov_..."]`. Every referenced governance request must exist; supplying it does not review, approve, or apply a proposal.
 
 Example:
 

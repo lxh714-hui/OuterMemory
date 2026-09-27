@@ -147,6 +147,45 @@ class GovernanceService:
             return {issue_type: findings.get(issue_type, [])}
         return scan
 
+    def trace(self, identifier):
+        """Human-facing, read-only provenance lookup across attention/proposal/history."""
+        from history_manager import HistoryError, _HistoryRepository
+        from proposal_store import _ProposalRepository, ProposalError
+        proposals = _ProposalRepository(self.root)
+        history = _HistoryRepository(self.root)
+        if identifier.startswith("gov_"):
+            request = self.request(identifier)
+            linked = proposals.find_by_source_request(identifier)
+            return {
+                "request_id": identifier,
+                "attention_status": request["resolution"]["status"],
+                "evidence": request["evidence"],
+                "linked_proposals": [self._proposal_trace(proposal, history) for proposal in linked],
+            }
+        if identifier.startswith("prop_"):
+            try:
+                proposal = proposals.load(identifier)
+            except ProposalError as error:
+                raise GovernanceError(str(error)) from error
+            return self._proposal_trace(proposal, history)
+        if identifier.startswith("evt_"):
+            try:
+                event = history.load_event(identifier)
+            except HistoryError as error:
+                raise GovernanceError(str(error)) from error
+            return {"event_id": event["event_id"], "proposal_id": event.get("proposal_id"), "source_request_ids": event.get("source_request_ids", []), "state": event.get("state")}
+        raise GovernanceError("trace identifier must be a governance request, proposal, or event id")
+
+    @staticmethod
+    def _proposal_trace(proposal, history):
+        event_id = proposal.get("applied_event_id")
+        event = history.load_event(event_id) if event_id else None
+        return {
+            "proposal_id": proposal["proposal_id"], "status": proposal["status"],
+            "source_request_ids": proposal.get("source_request_ids", []),
+            "history_event_id": event_id, "history_state": event.get("state") if event else None,
+        }
+
     def _request_once(self, state, channel, issue_type, subjects, evidence):
         key = f"{channel}:{issue_type}:{':'.join(subjects)}"
         for request in state["requests"]:

@@ -23,6 +23,16 @@ def _json_object(value):
     return decoded
 
 
+def _json_array(value):
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError("must be valid JSON") from error
+    if not isinstance(decoded, list) or not all(isinstance(item, str) for item in decoded):
+        raise argparse.ArgumentTypeError("must be a JSON array of strings")
+    return decoded
+
+
 def build_parser():
     parser = JsonArgumentParser(description="JSON CLI for project OuterMemory")
     parser.add_argument("--root", help="project repository root")
@@ -38,6 +48,7 @@ def build_parser():
     propose.add_argument("--id", required=True, dest="memory_id")
     propose.add_argument("--change", type=_json_object, default={})
     propose.add_argument("--reason")
+    propose.add_argument("--source-request-ids", type=_json_array)
 
     status = commands.add_parser("proposal-status")
     status.add_argument("proposal_id")
@@ -57,6 +68,7 @@ def main(argv=None):
                 {"category": args.category, "id": args.memory_id},
                 args.change,
                 args.reason,
+                args.source_request_ids,
             )
         else:
             result = memory.proposal_status(args.proposal_id)

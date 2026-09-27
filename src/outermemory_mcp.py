@@ -25,6 +25,7 @@ def create_server(project_root):
         memory_id: str,
         change: dict | None = None,
         reason: str | None = None,
+        source_request_ids: list[str] | None = None,
     ):
         """Create a pending, human-governed proposal for project memory."""
         return memory.propose(
@@ -32,6 +33,7 @@ def create_server(project_root):
             {"category": category, "id": memory_id},
             change,
             reason,
+            source_request_ids,
         )
 
     @server.tool(name="outermemory_proposal_status")

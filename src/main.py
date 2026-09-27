@@ -19,8 +19,8 @@ def confirm_bulk(action, identifiers):
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] not in {"approve", "reject", "apply", "rollback", "scan", "requests", "request", "resolve-request", "approve-all", "reject-all", "review-all", "dismiss-all"}:
-        print("usage: main.py approve|reject|apply|rollback <id> | approve-all|reject-all <proposal-id...> | review-all|dismiss-all <request-id...> | scan [issue-type|finding-id] | requests [issue-type] | request <id> | resolve-request <id>")
+    if len(argv) < 2 or argv[1] not in {"approve", "reject", "apply", "rollback", "scan", "requests", "request", "resolve-request", "trace", "approve-all", "reject-all", "review-all", "dismiss-all"}:
+        print("usage: main.py approve|reject|apply|rollback|trace <id> | approve-all|reject-all <proposal-id...> | review-all|dismiss-all <request-id...> | scan [issue-type|finding-id] | requests [issue-type] | request <id> | resolve-request <id>")
         return 2
     action = argv[1]
     if action in {"approve-all", "reject-all", "review-all", "dismiss-all"}:
@@ -71,6 +71,13 @@ def main(argv):
         print(f"usage: main.py {action} <id>")
         return 2
     identifier = argv[2]
+    if action == "trace":
+        try:
+            print(GovernanceService().trace(identifier))
+            return 0
+        except GovernanceError as error:
+            print(str(error))
+            return 1
     if action == "request":
         try:
             print(GovernanceService().request(identifier))

@@ -64,6 +64,19 @@ Retrieval counts, emitted milestones, announcement state, and request resolution
 
 At startup OuterMemory runs the same scan only if `last_successful_scan` is absent or at least 24 hours old. That timestamp is written only after a complete successful scan; crashes, interruptions, and validation failures leave it unchanged and are retried on the next startup.
 
+## Governance traceability
+
+```text
+Detection -> Attention / Governance Request -> Human Review -> Proposal -> Human Approval
+    -> Controlled Application -> History -> Trusted Project Memory
+```
+
+`reviewed` does not mean `approved`: governance requests are attention objects, while proposals are mutation requests. A proposal may optionally list one or more `source_request_ids`; direct proposals remain valid. Controlled application copies that provenance into its history event, and human-facing `main.py trace GOV_ID|PROP_ID|EVENT_ID` exposes the provenance links between governance requests, proposals, and history events without changing memory.
+
+### Current limitation
+
+Governance runtime state is file-backed and assumes serialized access. Concurrent clients may race when updating retrieval counts or governance state.
+
 This separation is intentional:
 
 - Retrieval authority and trusted-memory write authority are separate.

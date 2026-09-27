@@ -119,6 +119,7 @@ class ControlledMemoryWriter:
             "event_id": event_id,
             "kind": "mutation",
             "proposal_id": proposal["proposal_id"],
+            "source_request_ids": list(proposal.get("source_request_ids", [])),
             "operation": proposal["operation"],
             "target": proposal["target"],
             "timestamp": self._history.timestamp(),
