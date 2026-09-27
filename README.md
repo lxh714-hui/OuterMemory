@@ -1,12 +1,98 @@
 # OuterMemory
 
-**Human-governed persistence with risk-aware attention management for AI coding.**
+**A project-centric persistent memory layer for AI coding.**
 
 > **Memory > Agent > Model**
 
-Coding agents and models are replaceable. Project memory should persist independently of them. OuterMemory keeps trusted project knowledge in project-scoped Markdown files, so the same memory can be used across AI tools, agents, models, and developers.
+OuterMemory keeps durable, trusted project knowledge in project-scoped Markdown files. It gives developers, agents, and models a shared memory layer that survives individual chat sessions, tools, model changes, and AI vendors.
 
-OuterMemory is project-centric, not user-centric: memory belongs to the project, not to a particular developer, agent, or model.
+Memory belongs to the project—not to a model, agent, developer, vendor, or individual conversation. Different developers and AI tools can therefore work with the same trusted project memory.
+
+OuterMemory separates broad retrieval from trusted-memory write authority. AI can retrieve and use project knowledge; creation, modification, deletion, and merging of trusted long-term memory require explicit human approval.
+
+## Why OuterMemory
+
+AI coding tools can inspect current source code and use the current conversation, but durable project knowledge often disappears when a session ends or a team changes tools. Useful persistent context includes:
+
+- project conventions and standards;
+- architectural decisions and constraints;
+- important variables, resources, and paths;
+- project-specific operational knowledge.
+
+OuterMemory provides one part of an intentional routing model:
+
+```text
+Persistent project context      -> OuterMemory
+Current implementation facts    -> Repository inspection
+General knowledge               -> Model
+```
+
+OuterMemory does not replace repository inspection. It also does not require external knowledge to be approved before an AI can use it; governance applies to persistence into trusted project memory.
+
+## Quick Demo
+
+From the repository root, retrieve the primary record in the synthetic demo project:
+
+```text
+python src/outermemory_cli.py --root examples/demo-memory retrieve v_DEMO_SESSION_POLICY --topk 1
+```
+
+Expected result:
+
+```text
+v_DEMO_SESSION_POLICY
+-> exact ID match
+-> score 11
+```
+
+Then retrieve the same record by alias and include its one-hop related records:
+
+```text
+python src/outermemory_cli.py --root examples/demo-memory retrieve session-policy --topk 3
+```
+
+Expected result:
+
+```text
+v_DEMO_SESSION_POLICY
+-> direct alias match
+
+r_DEMO_WORKSPACE
+-> one-hop Related expansion
+
+s_DEMO_CONVENTION
+-> one-hop Related expansion
+```
+
+Retrieval is currently deterministic lexical retrieval, not semantic or vector retrieval. It does not modify the trusted Markdown memory records. It may update ignored governance runtime state under `.outermemory/` in the selected project root.
+
+## Core Principles
+
+### Project-centric memory
+
+Memory belongs to the project. A project can retain its trusted knowledge while developers, agents, models, or vendors change.
+
+### Memory > Agent > Model
+
+Agents and models are replaceable. Trusted project memory persists independently of them.
+
+### Broad retrieval, governed persistence
+
+Retrieval authority and trusted-memory persistence authority are separate concerns. AI may retrieve broadly and propose changes; a human must explicitly approve a trusted-memory mutation.
+
+### Human-governed trusted memory
+
+AI can create pending proposals. Humans approve or reject proposals, and only approved proposals can be applied through the controlled mutation path.
+
+### AI/model agnostic core
+
+OuterMemory is a project-memory boundary, not a framework owned by one model vendor or agent. MCP provides one AI-agnostic integration surface.
+
+### Traceability
+
+Approved mutations are recorded in history, with snapshots for governed rollback. Attention requests, proposals, approvals, applications, and history remain distinct concepts.
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -26,236 +112,139 @@ flowchart LR
     Model --> OM
 ```
 
-## The boundary
+## Retrieval
 
-OuterMemory follows one principle: **broad retrieval, governed persistence**.
+OuterMemory implements deterministic lexical retrieval over these trusted-memory fields:
 
-AI-facing callers can retrieve project memory broadly and create proposals. They cannot approve proposals, apply changes, or roll back history. Trusted memory changes only through explicit human governance.
+- ID
+- Aliases
+- Description
 
-```mermaid
-flowchart LR
-    AI["AI-facing Interface"]
-    AI -->|retrieve| Memory["Trusted Project Memory"]
-    AI -->|propose| Proposal["Pending Proposal"]
-    AI -->|proposal-status| Proposal
-    Proposal -->|explicit human approval| Apply["Controlled Application"]
-    Apply --> History["History Event"]
-    History --> Memory
-```
-
-## Governance attention channels
-
-Governance has four attention channels, not four permission levels. In every channel, **all trusted-memory creation, modification, merge, and deletion still require a proposal, explicit human approval, controlled application, and history**.
+Evidence ranks from strongest to weakest:
 
 ```text
-retrieval results ──> persistent retrieval totals ──> milestones 5, 10, 20, 40... ──> pending low-risk requests
-                                                                                         │
-                                                                                 announce each 10 once
-
-current retrieval items ──────> contextual scope ──┐
-                                                    ├─> shared Self-Check Engine ─> immediate request / grouped report
-whole trusted-memory library ─> full-library scope ─┘                                      │
-                                                                              proposal, if a human requests action
-                                                                                             │
-                                                                    human approval -> controlled application -> history
+Exact ID
+    >
+Exact alias
+    >
+Lexical ID match
+    >
+Lexical alias match
+    >
+Description lexical match
 ```
 
-Retrieval counts, emitted milestones, announcement state, and request resolution are persisted separately in ignored runtime state (`.outermemory/governance.json`). A batch announcement does not resolve a request. The full scan is conservative: broken `Related` references are schema evidence; stale `last_used`, identical descriptions/shared aliases, and conflicting optional metadata are explicitly labeled heuristics rather than facts. It never changes trusted memory.
+Equal relevance scores use logical memory ID ascending as a deterministic tie-breaker. Memory ID ordering is only a tie-breaker, not relevance evidence. Frequency and `last_used` are not retrieval relevance signals; retrieval frequency may instead be used by governance as an attention signal.
 
-At startup OuterMemory runs the same scan only if `last_successful_scan` is absent or at least 24 hours old. That timestamp is written only after a complete successful scan; crashes, interruptions, and validation failures leave it unchanged and are retried on the next startup.
+`Related` records expand one hop from a matched parent and remain secondary to direct results.
 
-## Governance traceability
+Current limitations are intentional and explicit:
+
+- no semantic or vector retrieval;
+- paraphrase-only and synonym-only queries may miss;
+- cross-language queries may miss when memory is stored in another language;
+- `Value` and `Guidelines` are not searchable retrieval fields.
+
+## Governance
+
+Trusted-memory mutation follows a separate lifecycle:
 
 ```text
-Detection -> Attention / Governance Request -> Human Review -> Proposal -> Human Approval
-    -> Controlled Application -> History -> Trusted Project Memory
+Proposal
+  -> Human Approval
+  -> Controlled Application
+  -> History
+  -> Trusted Memory
 ```
 
-`reviewed` does not mean `approved`: governance requests are attention objects, while proposals are mutation requests. A proposal may optionally list one or more `source_request_ids`; direct proposals remain valid. Controlled application copies that provenance into its history event, and human-facing `main.py trace GOV_ID|PROP_ID|EVENT_ID` exposes the provenance links between governance requests, proposals, and history events without changing memory.
+`reviewed` is not `approved`. Governance-request review handles human attention; proposal approval authorizes a trusted-memory mutation. Risk affects human attention priority, not AI mutation authority.
 
-### Current limitation
+OuterMemory has four governance attention channels:
 
-Governance runtime state is file-backed and assumes serialized access. Concurrent clients may race when updating retrieval counts or governance state.
+1. accumulated low-risk retrieval signals;
+2. contextual immediate self-check findings;
+3. manual full-library scans;
+4. startup scans when a successful scan is not recent.
 
-This separation is intentional:
+Every trusted-memory creation, modification, merge, or deletion still requires a proposal, explicit human approval, controlled application, and history.
 
-- Retrieval authority and trusted-memory write authority are separate.
-- Creating a proposal is not approval.
-- Approval is not application.
-- AI-facing interfaces do not expose `approve`, `reject`, `apply`, or `rollback`.
-- Team use follows naturally from project-centric memory; it is not a separate collaboration feature.
+## Interfaces
 
-## What is implemented
+### Python API
 
-- Project-scoped Markdown memory in `memory/`, with schema-supported `variables`, `resources`, `functions`, and `standards` categories.
-- Parsing, validation, ranked keyword retrieval, and related-memory expansion.
-- A Python `OuterMemory` API and a machine-readable JSON CLI.
-- Pending proposals with status inspection.
-- Explicit human approval or rejection.
-- Controlled mutation from approved proposals only, with validation and pre-mutation snapshots.
-- History events, rollback, recovery handling, and blocking when recovery is required.
-- An MCP adapter with stdio and Streamable HTTP transports.
-
-## Governance flow
-
-```text
-AI proposes
-  -> pending proposal
-  -> explicit human approval
-  -> controlled apply
-  -> history event
-  -> trusted project memory
-```
-
-The human-facing command interface supplies `approve`, `reject`, `apply`, and `rollback`. Approval and rejection require explicit confirmation; applying is allowed only for an approved proposal. Before an apply, OuterMemory snapshots affected trusted-memory paths and records a history event.
-
-Rollback is also governed:
-
-```text
-human-confirmed rollback
-  -> new history event
-  -> trusted memory restored
-```
-
-Rollback preserves audit history rather than erasing it.
-
-## Quick start
-
-Run from a project repository containing a `memory/` directory. The Python source is kept in `src/` and uses the installed Python MCP SDK for MCP support.
-
-Install the current MCP dependency when using MCP integration:
-
-```text
-python -m pip install mcp
-```
-
-Retrieve project memory through the JSON CLI:
-
-```text
-python src/outermemory_cli.py --root . retrieve "demo feature" --topk 3
-```
-
-The CLI prints JSON to standard output on success. It exposes only:
-
-- `retrieve`
-- `propose`
-- `proposal-status`
-
-For the full command arguments and output shapes, see [docs/cli.md](docs/cli.md).
-
-## Quick Demo
-
-From the repository root, retrieve the synthetic demo project's primary record:
-
-```text
-python src/outermemory_cli.py --root examples/demo-memory retrieve v_DEMO_SESSION_POLICY --topk 1
-```
-
-Then retrieve it by its documented alias and include its one-hop related records:
-
-```text
-python src/outermemory_cli.py --root examples/demo-memory retrieve session-policy --topk 3
-```
-
-The first command returns `v_DEMO_SESSION_POLICY`. The second returns that primary record followed by its related synthetic workspace and convention records. Retrieval is deterministic lexical matching over IDs, aliases, and descriptions; it is not semantic or vector retrieval. These commands never modify the three trusted-memory Markdown records. They may create ignored runtime governance state under `examples/demo-memory/.outermemory/`.
-
-## Active Retrieval
-
-An integrated coding agent should autonomously decide when project-persistent context is relevant; this is agent integration behavior, not an autonomous process inside OuterMemory Core.
-
-```text
-Coding Request
-      |
-      v
-Agent determines information need
-   /        |        \
-Persistent Current   General
-Context    Code      Knowledge
-   |         |          |
-OuterMemory Repository Model
-```
-
-Persistent project context routes to OuterMemory, current repository facts route to repository inspection, and general knowledge routes to the model. Retrieval remains broad and read-oriented; trusted-memory mutation remains governed separately. See [Active Retrieval v1](docs/active_retrieval.md). Codex is the currently validated integration, so users normally should not need to manually request memory retrieval while coding.
-
-## Python API
-
-Use `OuterMemory` when calling the project-memory interface directly:
+Use `OuterMemory(project_root)` for the AI-facing application interface:
 
 ```python
 from outermemory import OuterMemory
 
 memory = OuterMemory("/path/to/project")
-results = memory.retrieve("demo feature", topk=3)
-
-proposal = memory.propose(
-    "create",
-    {"category": "variables", "id": "v_DEMO"},
-    {"content": "...valid memory Markdown..."},
-    "Record the project setting",
-)
-status = memory.proposal_status(proposal["proposal_id"])
+results = memory.retrieve("session-policy", topk=3)
 ```
 
-When running this from the repository, make `src/` importable (for example, set `PYTHONPATH=src`). This API intentionally has no approval, rejection, application, or rollback methods.
+### JSON CLI
 
-## MCP integration
+The JSON CLI exposes only AI-facing capabilities:
 
-`src/outermemory_mcp.py` adapts one explicit project root to MCP. It exposes exactly three AI-facing tools:
+```text
+python src/outermemory_cli.py --root /path/to/project retrieve "session-policy" --topk 3
+python src/outermemory_cli.py --root /path/to/project propose create --category variables --id v_POLICY --change JSON_OBJECT
+python src/outermemory_cli.py --root /path/to/project proposal-status PROPOSAL_ID
+```
 
-- `outermemory_retrieve` -> `OuterMemory.retrieve(...)`
-- `outermemory_propose` -> `OuterMemory.propose(...)`
-- `outermemory_proposal_status` -> `OuterMemory.proposal_status(...)`
+### MCP
 
-No MCP tool can approve, reject, apply, or roll back memory changes.
-
-### Stdio
-
-Stdio is the default transport and is suitable for MCP clients that launch a local server process:
+The MCP server binds to one explicit project root:
 
 ```text
 python src/outermemory_mcp.py --root /path/to/project
 ```
 
-Codex integration has been verified end-to-end through MCP stdio. MCP remains an AI-agnostic integration boundary rather than a Codex-specific feature.
+It exposes exactly these tools:
 
-### Streamable HTTP
+- `outermemory_retrieve`
+- `outermemory_propose`
+- `outermemory_proposal_status`
 
-Run the same server over Streamable HTTP:
+AI-facing interfaces do not expose `approve`, `reject`, `apply`, or `rollback`. Those remain human-governed operations through the separate human CLI.
 
-```text
-python src/outermemory_mcp.py --root /path/to/project --transport streamable-http
-```
+## Active Retrieval
 
-The default endpoint is `http://127.0.0.1:8000/mcp`. `--host`, `--port`, and `--path` override those defaults.
-
-## Human governance commands
-
-From the project repository, the separate human-facing entry point is:
+Active Retrieval is primarily an agent-integration policy, not an autonomous process or agent framework inside OuterMemory Core. An integrated coding agent decides when persistent project context is relevant and formulates the retrieval query.
 
 ```text
-python src/main.py approve PROPOSAL_ID
-python src/main.py reject PROPOSAL_ID
-python src/main.py apply PROPOSAL_ID
-python src/main.py rollback EVENT_ID
-python src/main.py scan
-python src/main.py requests
+Persistent project context      -> OuterMemory
+Current source implementation   -> Repository inspection
+General knowledge               -> Model
 ```
 
-These commands are deliberately outside the AI-facing API, CLI, and MCP surfaces.
+Do not retrieve on every request. Codex has been validated as an integration example; the architecture remains AI-agnostic.
 
-`scan` performs the manual full-library read-only scan. `scan ISSUE_TYPE` reviews the latest scan group and `scan FINDING_ID` reviews one finding. `requests [ISSUE_TYPE]`, `request REQUEST_ID`, and human-confirmed `resolve-request REQUEST_ID` inspect and explicitly handle governance requests. Resolving a request does not alter trusted memory; a change prompted by a finding must still be submitted through `propose` and then approved and applied by a human.
-
-Human reviewers may run `approve-all PROPOSAL_ID...` or `reject-all PROPOSAL_ID...` for proposal groups. Governance-request groups use `review-all REQUEST_ID...` or `dismiss-all REQUEST_ID...`: those words deliberately describe attention handling, not mutation authorization. Each bulk operation requires a typed secondary confirmation. Individual review can stop and resume later; unnamed items remain pending. Proposal approval never applies a mutation.
-
-## Testing
-
-Run the full suite with:
+## Project Structure
 
 ```text
-python -m unittest discover -s tests -v
+memory/                 Trusted project-memory Markdown records
+src/                    Core library, CLIs, MCP adapter, and governance path
+examples/demo-memory/   Standalone synthetic retrieval demo
+tests/                  Unit, integration, and retrieval-quality tests
+docs/                   Architecture and CLI documentation
 ```
 
-The suite covers retrieval, proposal governance, controlled mutation and recovery, rollback, the JSON CLI, and MCP tool and transport selection.
+## Current Status and Limitations
+
+Implemented today:
+
+- project-scoped Markdown memory with support for `variables`, `resources`, `functions`, and `standards`;
+- deterministic lexical retrieval and one-hop Related expansion;
+- Python API, JSON CLI, and MCP integration;
+- governed proposals, human approval, controlled application, history, and rollback;
+- retrieval-quality, root-isolation, adapter-boundary, and demo coverage.
+
+Not implemented:
+
+- semantic retrieval, embeddings, or a vector database;
+- automatic query rewriting or synonym dictionaries;
+- a GUI review console;
+- universal cross-agent integrations.
 
 ## Notice
 
