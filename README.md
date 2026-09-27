@@ -143,6 +143,22 @@ The CLI prints JSON to standard output on success. It exposes only:
 
 For the full command arguments and output shapes, see [docs/cli.md](docs/cli.md).
 
+## Quick Demo
+
+From the repository root, retrieve the synthetic demo project's primary record:
+
+```text
+python src/outermemory_cli.py --root examples/demo-memory retrieve v_DEMO_SESSION_POLICY --topk 1
+```
+
+Then retrieve it by its documented alias and include its one-hop related records:
+
+```text
+python src/outermemory_cli.py --root examples/demo-memory retrieve session-policy --topk 3
+```
+
+The first command returns `v_DEMO_SESSION_POLICY`. The second returns that primary record followed by its related synthetic workspace and convention records. Retrieval is deterministic lexical matching over IDs, aliases, and descriptions; it is not semantic or vector retrieval. These commands never modify the three trusted-memory Markdown records. They may create ignored runtime governance state under `examples/demo-memory/.outermemory/`.
+
 ## Active Retrieval
 
 An integrated coding agent should autonomously decide when project-persistent context is relevant; this is agent integration behavior, not an autonomous process inside OuterMemory Core.
