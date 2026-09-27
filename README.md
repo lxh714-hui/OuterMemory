@@ -143,6 +143,24 @@ The CLI prints JSON to standard output on success. It exposes only:
 
 For the full command arguments and output shapes, see [docs/cli.md](docs/cli.md).
 
+## Active Retrieval
+
+An integrated coding agent should autonomously decide when project-persistent context is relevant; this is agent integration behavior, not an autonomous process inside OuterMemory Core.
+
+```text
+Coding Request
+      |
+      v
+Agent determines information need
+   /        |        \
+Persistent Current   General
+Context    Code      Knowledge
+   |         |          |
+OuterMemory Repository Model
+```
+
+Persistent project context routes to OuterMemory, current repository facts route to repository inspection, and general knowledge routes to the model. Retrieval remains broad and read-oriented; trusted-memory mutation remains governed separately. See [Active Retrieval v1](docs/active_retrieval.md). Codex is the currently validated integration, so users normally should not need to manually request memory retrieval while coding.
+
 ## Python API
 
 Use `OuterMemory` when calling the project-memory interface directly:
