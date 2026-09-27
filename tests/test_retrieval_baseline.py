@@ -12,11 +12,11 @@ from memory_writer import ControlledMemoryWriter, MemoryWriteError
 from proposal_store import HumanProposalDecisions, ProposalService
 
 
-def record(memory_id, description="", aliases=(), related=(), extra_sections=()):
+def record(memory_id, description="", aliases=(), related=(), extra_sections=(), frequency=0):
     """Build a record in the currently supported section-based Markdown schema."""
     parts = [
         "# Metadata\n\n",
-        f"id: {memory_id}\nfrequency: 0\nlast_used:\n\n",
+        f"id: {memory_id}\nfrequency: {frequency}\nlast_used:\n\n",
         "# Description\n\n",
         f"{description}\n",
     ]
@@ -99,6 +99,7 @@ class RetrievalCharacterizationTests(MemoryTestCase):
         self.write_record("variables", "v_TOP_C", description="topk common phrase")
         self.write_record("variables", "v_TIE_A", description="equal-score-token")
         self.write_record("variables", "v_TIE_B", description="equal-score-token")
+        self.write_record("variables", "v_DIRECT_WEAK", description="exact-alias")
 
     def test_exact_id_matching_has_current_id_weight(self):
         results = self.retrieve("v_EXACT_ID")
@@ -119,6 +120,25 @@ class RetrievalCharacterizationTests(MemoryTestCase):
         self.assertEqual(1, results[0]["score"])
         self.assertEqual(0, results[1]["score"])
 
+    def test_punctuation_attached_query_token_is_normalized(self):
+        results = self.retrieve("(exact-alias),")
+        self.assertEqual("v_EXACT_ID", result_ids(results)[0])
+        self.assertEqual(6, results[0]["score"])
+
+    def test_related_expansion_remains_secondary_to_direct_matches(self):
+        results = self.retrieve("exact-alias", topk=5)
+        self.assertEqual(["v_EXACT_ID", "v_DIRECT_WEAK", "r_RELATED"], result_ids(results))
+        self.assertEqual([6, 1, 5], [result["score"] for result in results])
+
+    def test_frequency_does_not_affect_lexical_relevance_or_tie_breaking(self):
+        self.write_record(
+            "variables", "v_FREQUENCY_A", description="frequency-neutral-token", frequency=999,
+        )
+        self.write_record("variables", "v_FREQUENCY_B", description="frequency-neutral-token")
+        results = self.retrieve("frequency-neutral-token", topk=2)
+        self.assertEqual(["v_FREQUENCY_A", "v_FREQUENCY_B"], result_ids(results))
+        self.assertEqual([1, 1], [result["score"] for result in results])
+
     def test_multiple_query_terms_deduplicate_to_the_highest_scored_result(self):
         results = self.retrieve("v_EXACT_ID exact-alias")
         matches = [result for result in results if result["item"]["id"] == "v_EXACT_ID"]
@@ -137,17 +157,18 @@ class RetrievalCharacterizationTests(MemoryTestCase):
         self.assertEqual(5, scores["r_RELATED"])
         self.assertNotIn("s_GRANDCHILD", scores)
 
-    def test_equal_score_order_is_stable_for_one_loaded_library(self):
+    def test_equal_score_order_is_id_ascending_even_when_fixture_order_is_reversed(self):
         memory = MemoryLoader(repository_root_path=self.root).load()
-        source_tie_order = [
-            item["id"]
-            for category in memory.values()
-            for item in category.values()
-            if item["id"] in {"v_TIE_A", "v_TIE_B"}
-        ]
-        first = result_ids(MemoryRetriever(memory).retrieve("equal-score-token", topk=5))
-        second = result_ids(MemoryRetriever(memory).retrieve("equal-score-token", topk=5))
-        self.assertEqual(source_tie_order, first)
+        reversed_fixture = {
+            "variables": {
+                "v_TIE_B": memory["variables"]["v_TIE_B"],
+                "v_TIE_A": memory["variables"]["v_TIE_A"],
+            },
+            "resources": {}, "functions": {}, "standards": {},
+        }
+        first = result_ids(MemoryRetriever(reversed_fixture).retrieve("equal-score-token", topk=5))
+        second = result_ids(MemoryRetriever(reversed_fixture).retrieve("equal-score-token", topk=5))
+        self.assertEqual(["v_TIE_A", "v_TIE_B"], first)
         self.assertEqual(first, second)
 
     def test_unrelated_query_returns_no_results(self):
@@ -196,7 +217,7 @@ class MemoryIdentityCharacterizationTests(MemoryTestCase):
 
 
 class RetrievalQualityBaselineTests(MemoryTestCase):
-    """A deterministic 70-record corpus for baseline quality, not performance timing."""
+    """A deterministic 71-record corpus for baseline quality, not performance timing."""
 
     PRIMARY = "v_SESSION_POLICY"
 
@@ -245,6 +266,8 @@ class RetrievalQualityBaselineTests(MemoryTestCase):
         self.assertEqual(38, len(ids))
         self.assertIn(self.PRIMARY, ids)
         self.assertEqual(1.0, recall_at_k(ids, {self.PRIMARY}, 38))
+        # ID lexical matches outrank the primary's Description-only match.
+        self.assertEqual(36, ids.index(self.PRIMARY) + 1)
 
     def test_unrelated_query_baseline_has_no_false_positive(self):
         ids = result_ids(self.retrieve("absent-baseline-token", topk=5))
@@ -259,15 +282,9 @@ class RetrievalQualityBaselineTests(MemoryTestCase):
 
     def test_equal_score_ranking_is_deterministic(self):
         memory = MemoryLoader(repository_root_path=self.root).load()
-        source_tie_order = [
-            item["id"]
-            for category in memory.values()
-            for item in category.values()
-            if item["id"] in {"v_TIE_A", "v_TIE_B"}
-        ]
         first = result_ids(MemoryRetriever(memory).retrieve("controlled-tie-token", topk=2))
         second = result_ids(MemoryRetriever(memory).retrieve("controlled-tie-token", topk=2))
-        self.assertEqual(source_tie_order, first)
+        self.assertEqual(["v_TIE_A", "v_TIE_B"], first)
         self.assertEqual(first, second)
 
     def test_scale_corpus_contains_seventy_one_records_and_still_retrieves_exact_id(self):

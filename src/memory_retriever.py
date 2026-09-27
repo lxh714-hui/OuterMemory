@@ -49,7 +49,11 @@ class MemoryRetriever:
                 if related_item:
 
                     expanded.append(
-                        {"score": result["score"] - 1, "item": related_item}
+                        {
+                            "score": result["score"] - 1,
+                            "item": related_item,
+                            "_related": True,
+                        }
                     )
 
                     seen.add(related_id)
@@ -57,21 +61,22 @@ class MemoryRetriever:
         return expanded
 
     def retrieve(self, question, topk=5):
-
-        words = question.split()
-
-        results = []
-
-        per_word_k = max(topk, 3)
-
-        for word in words:
-
-            results.extend(self.query.topk(word, per_word_k))
+        # Query normalization and lexical ranking are centralized in MemoryQuery.
+        # It evaluates all normalized terms before relation expansion, so a record
+        # keeps its strongest direct evidence rather than accumulating duplicates.
+        results = self.query.search_ranked(question)
 
         results = self.expand_relations(results)
 
         results = self.deduplicate(results)
 
-        results.sort(key=lambda x: x["score"], reverse=True)
+        # Direct matches always precede related expansion. Within either group,
+        # memory ID is a deterministic tie-breaker only, never relevance evidence.
+        results.sort(
+            key=lambda x: (x.get("_related", False), -x["score"], x["item"]["id"])
+        )
 
-        return results[:topk]
+        return [
+            {"score": result["score"], "item": result["item"]}
+            for result in results[:topk]
+        ]
