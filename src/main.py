@@ -3,6 +3,17 @@ import sys
 from governance import GovernanceError, GovernanceService
 from memory_writer import ControlledMemoryWriter
 from proposal_store import HumanProposalDecisions, ProposalError
+from repository_paths import repository_root
+
+
+USAGE = (
+    "usage: main.py [--root PROJECT_ROOT] "
+    "approve|reject|apply|rollback|trace <id> | "
+    "approve-all|reject-all <proposal-id...> | "
+    "review-all|dismiss-all <request-id...> | "
+    "scan [issue-type|finding-id] | requests [issue-type] | "
+    "request <id> | resolve-request <id>"
+)
 
 
 def confirm(action, identifier):
@@ -18,9 +29,20 @@ def confirm_bulk(action, identifiers):
     return response.strip().lower() == action
 
 
+def _root_and_arguments(argv):
+    """Resolve the optional adapter root once before creating any services."""
+    arguments = list(argv)
+    if len(arguments) >= 2 and arguments[1] == "--root":
+        if len(arguments) < 3:
+            return None, None
+        return repository_root(arguments[2]), [arguments[0], *arguments[3:]]
+    return None, arguments
+
+
 def main(argv):
-    if len(argv) < 2 or argv[1] not in {"approve", "reject", "apply", "rollback", "scan", "requests", "request", "resolve-request", "trace", "approve-all", "reject-all", "review-all", "dismiss-all"}:
-        print("usage: main.py approve|reject|apply|rollback|trace <id> | approve-all|reject-all <proposal-id...> | review-all|dismiss-all <request-id...> | scan [issue-type|finding-id] | requests [issue-type] | request <id> | resolve-request <id>")
+    root, argv = _root_and_arguments(argv)
+    if argv is None or len(argv) < 2 or argv[1] not in {"approve", "reject", "apply", "rollback", "scan", "requests", "request", "resolve-request", "trace", "approve-all", "reject-all", "review-all", "dismiss-all"}:
+        print(USAGE)
         return 2
     action = argv[1]
     if action in {"approve-all", "reject-all", "review-all", "dismiss-all"}:
@@ -39,11 +61,11 @@ def main(argv):
             return 2
         try:
             if is_proposal_action:
-                count = len(HumanProposalDecisions().decide_many(
+                count = len(HumanProposalDecisions(root).decide_many(
                     identifiers, "approved" if action == "approve-all" else "rejected"
                 ))
             else:
-                count = len(GovernanceService().resolve_many(
+                count = len(GovernanceService(root).resolve_many(
                     identifiers, "reviewed" if action == "review-all" else "dismissed"
                 ))
         except (GovernanceError, ProposalError, OSError) as error:
@@ -55,7 +77,7 @@ def main(argv):
         if len(argv) > 3:
             print("too many arguments")
             return 2
-        governance = GovernanceService()
+        governance = GovernanceService(root)
         try:
             result = governance.full_scan() if action == "scan" and len(argv) == 2 else (
                 governance.latest_scan(finding_id=argv[2]) if action == "scan" and argv[2].startswith("finding_") else
@@ -73,14 +95,14 @@ def main(argv):
     identifier = argv[2]
     if action == "trace":
         try:
-            print(GovernanceService().trace(identifier))
+            print(GovernanceService(root).trace(identifier))
             return 0
         except GovernanceError as error:
             print(str(error))
             return 1
     if action == "request":
         try:
-            print(GovernanceService().request(identifier))
+            print(GovernanceService(root).request(identifier))
             return 0
         except GovernanceError as error:
             print(str(error))
@@ -90,7 +112,7 @@ def main(argv):
             print("No action taken.")
             return 1
         try:
-            request = GovernanceService().resolve_request(identifier)
+            request = GovernanceService(root).resolve_request(identifier)
             print(f"Governance request {request['request_id']} is {request['resolution']['status']}.")
             return 0
         except GovernanceError as error:
@@ -100,11 +122,11 @@ def main(argv):
         if not confirm(action, identifier):
             print("No action taken.")
             return 1
-        decisions = HumanProposalDecisions()
+        decisions = HumanProposalDecisions(root)
         proposal = decisions.approve(identifier) if action == "approve" else decisions.reject(identifier)
         print(f"Proposal {proposal['proposal_id']} is {proposal['status']}.")
         return 0
-    writer = ControlledMemoryWriter()
+    writer = ControlledMemoryWriter(root)
     if action == "apply":
         event = writer.apply_approved_proposal(identifier)
         print(f"Applied as history event {event['event_id']}.")
