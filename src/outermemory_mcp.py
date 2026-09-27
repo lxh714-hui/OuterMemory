@@ -3,7 +3,9 @@
 import argparse
 from pathlib import Path
 
+from adapter_errors import EXPECTED_ADAPTER_ERRORS, error_details
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from outermemory import OuterMemory
 
@@ -13,10 +15,19 @@ def create_server(project_root):
     memory = OuterMemory(Path(project_root).resolve())
     server = MCPServer("OuterMemory")
 
+    def call(action):
+        try:
+            return action()
+        except EXPECTED_ADAPTER_ERRORS as error:
+            error_type, message = error_details(error)
+            # The MCP transport renders ToolError as an expected tool failure.
+            # Do not return an ordinary successful payload for a failed operation.
+            raise ToolError(f"{error_type}: {message}") from error
+
     @server.tool(name="outermemory_retrieve")
     def retrieve(question: str, topk: int = 5):
         """Retrieve relevant records from this project's memory."""
-        return memory.retrieve(question, topk)
+        return call(lambda: memory.retrieve(question, topk))
 
     @server.tool(name="outermemory_propose")
     def propose(
@@ -28,18 +39,20 @@ def create_server(project_root):
         source_request_ids: list[str] | None = None,
     ):
         """Create a pending, human-governed proposal for project memory."""
-        return memory.propose(
-            operation,
-            {"category": category, "id": memory_id},
-            change,
-            reason,
-            source_request_ids,
+        return call(
+            lambda: memory.propose(
+                operation,
+                {"category": category, "id": memory_id},
+                change,
+                reason,
+                source_request_ids,
+            )
         )
 
     @server.tool(name="outermemory_proposal_status")
     def proposal_status(proposal_id: str):
         """Get the status of a project-memory proposal."""
-        return memory.proposal_status(proposal_id)
+        return call(lambda: memory.proposal_status(proposal_id))
 
     return server
 

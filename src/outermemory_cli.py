@@ -4,12 +4,17 @@ import argparse
 import json
 import sys
 
+from adapter_errors import EXPECTED_ADAPTER_ERRORS, error_details
 from outermemory import OuterMemory
+
+
+def _error_envelope(error_type, message):
+    return {"ok": False, "error": {"type": error_type, "message": message}}
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
     def error(self, message):
-        print(json.dumps({"error": message}), file=sys.stderr)
+        print(json.dumps(_error_envelope("invalid_input", message)), file=sys.stderr)
         raise SystemExit(2)
 
 
@@ -57,9 +62,9 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    memory = OuterMemory(args.root)
 
     try:
+        memory = OuterMemory(args.root)
         if args.command == "retrieve":
             result = memory.retrieve(args.question, args.topk)
         elif args.command == "propose":
@@ -72,8 +77,9 @@ def main(argv=None):
             )
         else:
             result = memory.proposal_status(args.proposal_id)
-    except Exception as error:
-        print(json.dumps({"error": str(error)}), file=sys.stderr)
+    except EXPECTED_ADAPTER_ERRORS as error:
+        error_type, message = error_details(error)
+        print(json.dumps(_error_envelope(error_type, message)), file=sys.stderr)
         return 1
 
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str))

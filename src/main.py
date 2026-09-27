@@ -1,5 +1,6 @@
 import sys
 
+from adapter_errors import EXPECTED_ADAPTER_ERRORS, error_details
 from governance import GovernanceError, GovernanceService
 from memory_writer import ControlledMemoryWriter
 from proposal_store import HumanProposalDecisions, ProposalError
@@ -68,8 +69,8 @@ def main(argv):
                 count = len(GovernanceService(root).resolve_many(
                     identifiers, "reviewed" if action == "review-all" else "dismissed"
                 ))
-        except (GovernanceError, ProposalError, OSError) as error:
-            print(str(error))
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
             return 1
         print(f"{count} items {verb}.")
         return 0
@@ -84,8 +85,8 @@ def main(argv):
                 governance.latest_scan(issue_type=argv[2]) if action == "scan" else
                 governance.pending_requests(argv[2] if len(argv) == 3 else None)
             )
-        except GovernanceError as error:
-            print(str(error))
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
             return 1
         print(result)
         return 0
@@ -97,15 +98,15 @@ def main(argv):
         try:
             print(GovernanceService(root).trace(identifier))
             return 0
-        except GovernanceError as error:
-            print(str(error))
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
             return 1
     if action == "request":
         try:
             print(GovernanceService(root).request(identifier))
             return 0
-        except GovernanceError as error:
-            print(str(error))
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
             return 1
     if action == "resolve-request":
         if not confirm("resolve governance request", identifier):
@@ -115,26 +116,42 @@ def main(argv):
             request = GovernanceService(root).resolve_request(identifier)
             print(f"Governance request {request['request_id']} is {request['resolution']['status']}.")
             return 0
-        except GovernanceError as error:
-            print(str(error))
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
             return 1
     if action in {"approve", "reject"}:
         if not confirm(action, identifier):
             print("No action taken.")
             return 1
-        decisions = HumanProposalDecisions(root)
-        proposal = decisions.approve(identifier) if action == "approve" else decisions.reject(identifier)
+        try:
+            decisions = HumanProposalDecisions(root)
+            proposal = decisions.approve(identifier) if action == "approve" else decisions.reject(identifier)
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
+            return 1
         print(f"Proposal {proposal['proposal_id']} is {proposal['status']}.")
         return 0
-    writer = ControlledMemoryWriter(root)
+    try:
+        writer = ControlledMemoryWriter(root)
+    except EXPECTED_ADAPTER_ERRORS as error:
+        print(error_details(error)[1])
+        return 1
     if action == "apply":
-        event = writer.apply_approved_proposal(identifier)
+        try:
+            event = writer.apply_approved_proposal(identifier)
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
+            return 1
         print(f"Applied as history event {event['event_id']}.")
     else:
         if not confirm("rollback", identifier):
             print("No action taken.")
             return 1
-        event = writer.rollback(identifier)
+        try:
+            event = writer.rollback(identifier)
+        except EXPECTED_ADAPTER_ERRORS as error:
+            print(error_details(error)[1])
+            return 1
         print(f"Rollback recorded as history event {event['event_id']}.")
     return 0
 

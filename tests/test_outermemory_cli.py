@@ -55,7 +55,10 @@ class OuterMemoryCliTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("invalid choice", json.loads(result.stderr)["error"])
+        error = json.loads(result.stderr)
+        self.assertFalse(error["ok"])
+        self.assertEqual("invalid_input", error["error"]["type"])
+        self.assertIn("invalid choice", error["error"]["message"])
 
 
 if __name__ == "__main__":
